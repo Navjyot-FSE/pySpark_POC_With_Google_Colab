@@ -1,0 +1,134 @@
+############################
+#Inital setup to run pySpark
+!apt-get update
+!apt-get install openjdk-8-jdk-headless -qq > /dev/null
+!wget -q http://archive.apache.org/dist/spark/spark-3.1.1/spark-3.1.1-bin-hadoop3.2.tgz
+!tar xf spark-3.1.1-bin-hadoop3.2.tgz
+!pip install -q findspark
+
+import os
+os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-8-openjdk-amd64"
+os.environ["SPARK_HOME"] = "/content/spark-3.1.1-bin-hadoop3.2"
+
+!ls
+
+import findspark
+findspark.init()
+
+import pyspark
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.master("local[*]").getOrCreate()
+spark
+
+############################
+# import csv file data to df variable #Method1
+df = spark.read.format("csv").option("header", "true").load("original.csv")
+df.show()
+
+############################
+# import csv file data to df variable #Method2
+df2 = spark.read.csv("original.csv", header=True)
+df2.show()
+#Other file format are simple E.g. spark.read.text(...)
+
+df2.dtypes #get data types of columns (default is string for all)
+
+############################
+#we can define our datatypes to file schema as below
+from pyspark.sql.types import *
+schema = StructType([
+  StructField('id', IntegerType()),
+  StructField('first_name', StringType()),
+  StructField('last_name', StringType()),
+  StructField('gender', StringType()),
+  StructField('City', StringType()),
+  StructField('JobTitle', StringType()),
+  StructField('Salary', StringType()),
+  StructField('Latitude', FloatType()),
+  StructField('Longitude', FloatType())])
+
+df3 = spark.read.csv("original.csv", header=True, schema = schema)
+df3.show()
+
+df3.dtypes
+
+############################
+#Inspect A Dataframe
+df.head(5) #gives first 5 rows as array
+df.first() #gives first row as array
+df.describe().show() #summary statistics for your dataframe and display them.
+df.columns #gives column names
+df.count() #gives number of rows
+df.distinct().count() #gives number of distinct rows
+
+############################
+#Handling Null & Duplicate Values
+df_dropped = df.na.drop() #drops all rows with null values
+df_dropped.show()
+
+df_null_jobs = df.filter(df.JobTitle.isNotNull()) #filters out rows with null values in JobTitle column
+df_null_jobs.show()
+
+from pyspark.sql.functions import *
+df_handled = df.withColumn("clean_city", when(df.City.isNull(), 'Unknown').otherwise(df.City)) #replaces null values in City column with 'Unknown'
+df_handled.show()
+
+df_no_duplicates = df.dropDuplicates() #drops duplicate rows
+df_no_duplicates .show()
+
+############################
+#Selecting & Filtering
+
+#prompt : select only "first_name", "last_name" from df
+df.select("first_name", "last_name").show()
+
+df_select = df.select("first_name", "last_name")
+df_select.show()
+
+#prompt : select with column renamed firstname to fn lastname to ln 
+df.select(df.first_name.alias("fn"), df.last_name.alias("ln")).show()
+
+df_renamed = df.withColumnRenamed('first_name', 'fn')
+df_renamed.show()
+
+df_filter = df.filter(df.first_name == 'Alvera')
+df_filter.show()
+
+df_filter = df.filter(df.first_name.like('%lv%'))
+df_filter.show()
+
+df_filter = df.filter(df.first_name.endswith('era'))
+df_filter.show()
+
+df_filter = df.filter(df.first_name.startswith('Alv'))
+df_filter.show()
+
+df_filter = df.filter(df.id.between(10, 20))
+df_filter.show()
+
+df_filter = df.filter(df.first_name.isin('Alvera', 'Alvan'))
+df_filter.show()
+
+df_substr = df.select(df.first_name, df.first_name.substr(1, 5).alias('name'))
+df_substr.show()
+
+df_filter = df.filter((df.first_name.isin('Alvera', 'Valma')) & (df.gender.isin('Male')) & (df.City.like('%ondon')))
+df_filter.show()
+
+df_filter = df.filter((df.first_name.isin('Alvera', 'Alvan')) & (df.City.like('%gang%')))
+df_filter.show()
+
+
+########################
+#SQL 
+df.createOrReplaceTempView("df_table")
+spark.sql("SELECT * FROM df_table").show()
+spark.sql("SELECT * FROM df_table where first_name = 'Melinde'").show()
+
+
+########################
+from pyspark.sql.functions import *
+df_salary_cleaned = df.withColumn("Salary", regexp_replace(col("Salary"), "\\$", "")) \
+                     .withColumn("Salary", col("Salary").cast("float"))
+df_salary_cleaned.show()
+
